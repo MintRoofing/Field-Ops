@@ -61,6 +61,21 @@ export const projects = pgTable("projects", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const projectMembers = pgTable("project_members", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  userId: text("user_id").notNull(),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+});
+
+export const projectMessages = pgTable("project_messages", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  senderId: text("sender_id").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const photos = pgTable("photos", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
@@ -92,6 +107,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   photos: many(photos),
   messages: many(messages),
   boardMemberships: many(boardMembers),
+  projectMemberships: many(projectMembers),
 }));
 
 export const timeCardsRelations = relations(timeCards, ({ one }) => ({
@@ -105,6 +121,18 @@ export const locationsRelations = relations(locations, ({ one }) => ({
 export const projectsRelations = relations(projects, ({ many, one }) => ({
   photos: many(photos),
   creator: one(users, { fields: [projects.createdBy], references: [users.id] }),
+  members: many(projectMembers),
+  messages: many(projectMessages),
+}));
+
+export const projectMembersRelations = relations(projectMembers, ({ one }) => ({
+  project: one(projects, { fields: [projectMembers.projectId], references: [projects.id] }),
+  user: one(users, { fields: [projectMembers.userId], references: [users.id] }),
+}));
+
+export const projectMessagesRelations = relations(projectMessages, ({ one }) => ({
+  project: one(projects, { fields: [projectMessages.projectId], references: [projects.id] }),
+  sender: one(users, { fields: [projectMessages.senderId], references: [users.id] }),
 }));
 
 export const photosRelations = relations(photos, ({ one }) => ({

@@ -354,21 +354,51 @@ app.get("/api/locations/live", requireAuth, async (req, res) => {
 
 // ============ PROJECTS ============
 
-app.get("/api/projects", requireAuth, async (req, res) => {
+app.get("/api/projects", requireAuth, async (req: any, res) => {
+  const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.session.userId));
+  const isAdmin = user.role === 'admin';
+
   const projects = await db.query.projects.findMany({
-    with: { photos: true },
+    with: {
+      photos: true,
+      members: { with: { user: true } },
+      creator: true,
+    },
     orderBy: [desc(schema.projects.createdAt)],
   });
-  res.json(projects);
+
+  // Filter projects for non-admin users
+  const filteredProjects = isAdmin ? projects : projects.filter(p => {
+    const isCreator = p.createdBy === req.session.userId;
+    const isMember = p.members.some(m => m.userId === req.session.userId);
+    return isCreator || isMember;
+  });
+
+  res.json(filteredProjects.map(p => ({
+    ...p,
+    members: p.members.map(m => ({
+      id: m.id,
+      userId: m.userId,
+      user: { id: m.user.id, firstName: m.user.firstName, lastName: m.user.lastName }
+    })),
+    creator: p.creator ? { id: p.creator.id, firstName: p.creator.firstName, lastName: p.creator.lastName } : null,
+  })));
 });
 
 app.post("/api/projects", requireAuth, async (req: any, res) => {
   const { name, description } = req.body;
-  const [project] = await db.insert(schema.projects).values({ 
-    name, 
+  const [project] = await db.insert(schema.projects).values({
+    name,
     description,
     createdBy: req.session.userId,
   }).returning();
+
+  // Auto-add creator as a member
+  await db.insert(schema.projectMembers).values({
+    projectId: project.id,
+    userId: req.session.userId,
+  });
+
   res.status(201).json(project);
 });
 
@@ -387,9 +417,111 @@ app.put("/api/projects/:id", requireAuth, async (req: any, res) => {
 
 app.delete("/api/projects/:id", requireAdmin, async (req, res) => {
   const { id } = req.params;
+  await db.delete(schema.projectMessages).where(eq(schema.projectMessages.projectId, parseInt(id)));
+  await db.delete(schema.projectMembers).where(eq(schema.projectMembers.projectId, parseInt(id)));
   await db.delete(schema.photos).where(eq(schema.photos.projectId, parseInt(id)));
   await db.delete(schema.projects).where(eq(schema.projects.id, parseInt(id)));
   res.json({ message: "Project deleted" });
+});
+
+// ============ PROJECT MEMBERS ============
+
+app.get("/api/projects/:id/members", requireAuth, async (req: any, res) => {
+  const { id } = req.params;
+  const members = await db.query.projectMembers.findMany({
+    where: eq(schema.projectMembers.projectId, parseInt(id)),
+    with: { user: true },
+  });
+  res.json(members.map(m => ({
+    id: m.id,
+    projectId: m.projectId,
+    userId: m.userId,
+    joinedAt: m.joinedAt,
+    user: { id: m.user.id, firstName: m.user.firstName, lastName: m.user.lastName, email: m.user.email }
+  })));
+});
+
+app.post("/api/projects/:id/members", requireAdmin, async (req: any, res) => {
+  const { id } = req.params;
+  const { userId } = req.body;
+
+  // Check if already a member
+  const existing = await db.select().from(schema.projectMembers)
+    .where(and(eq(schema.projectMembers.projectId, parseInt(id)), eq(schema.projectMembers.userId, userId)));
+  if (existing.length > 0) return res.status(400).json({ message: "User already a member" });
+
+  const [member] = await db.insert(schema.projectMembers).values({
+    projectId: parseInt(id),
+    userId,
+  }).returning();
+  res.status(201).json(member);
+});
+
+app.delete("/api/projects/:id/members/:userId", requireAdmin, async (req, res) => {
+  const { id, userId } = req.params;
+  await db.delete(schema.projectMembers)
+    .where(and(eq(schema.projectMembers.projectId, parseInt(id)), eq(schema.projectMembers.userId, userId)));
+  res.json({ message: "Member removed" });
+});
+
+// ============ PROJECT CHAT ============
+
+app.get("/api/projects/:id/messages", requireAuth, async (req: any, res) => {
+  const { id } = req.params;
+
+  // Check if user has access (admin or member)
+  const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.session.userId));
+  if (user.role !== 'admin') {
+    const [project] = await db.select().from(schema.projects).where(eq(schema.projects.id, parseInt(id)));
+    const isMember = await db.select().from(schema.projectMembers)
+      .where(and(eq(schema.projectMembers.projectId, parseInt(id)), eq(schema.projectMembers.userId, req.session.userId)));
+    const isCreator = project?.createdBy === req.session.userId;
+    if (isMember.length === 0 && !isCreator) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+  }
+
+  const messages = await db.query.projectMessages.findMany({
+    where: eq(schema.projectMessages.projectId, parseInt(id)),
+    with: { sender: true },
+    orderBy: [schema.projectMessages.createdAt],
+  });
+  res.json(messages.map(m => ({
+    id: m.id,
+    projectId: m.projectId,
+    content: m.content,
+    createdAt: m.createdAt,
+    sender: { id: m.sender.id, firstName: m.sender.firstName, lastName: m.sender.lastName }
+  })));
+});
+
+app.post("/api/projects/:id/messages", requireAuth, async (req: any, res) => {
+  const { id } = req.params;
+  const { content } = req.body;
+
+  // Check if user has access (admin, creator, or member)
+  const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.session.userId));
+  if (user.role !== 'admin') {
+    const [project] = await db.select().from(schema.projects).where(eq(schema.projects.id, parseInt(id)));
+    const isMember = await db.select().from(schema.projectMembers)
+      .where(and(eq(schema.projectMembers.projectId, parseInt(id)), eq(schema.projectMembers.userId, req.session.userId)));
+    const isCreator = project?.createdBy === req.session.userId;
+    if (isMember.length === 0 && !isCreator) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+  }
+
+  const [message] = await db.insert(schema.projectMessages).values({
+    projectId: parseInt(id),
+    senderId: req.session.userId,
+    content,
+  }).returning();
+
+  const [sender] = await db.select().from(schema.users).where(eq(schema.users.id, req.session.userId));
+  res.status(201).json({
+    ...message,
+    sender: { id: sender.id, firstName: sender.firstName, lastName: sender.lastName }
+  });
 });
 
 // ============ PHOTOS ============
