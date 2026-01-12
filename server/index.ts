@@ -524,6 +524,16 @@ app.post("/api/projects/:id/messages", requireAuth, async (req: any, res) => {
   });
 });
 
+app.delete("/api/projects/:projectId/messages/:messageId", requireAdmin, async (req, res) => {
+  const { projectId, messageId } = req.params;
+  await db.delete(schema.projectMessages)
+    .where(and(
+      eq(schema.projectMessages.id, parseInt(messageId)),
+      eq(schema.projectMessages.projectId, parseInt(projectId))
+    ));
+  res.json({ message: "Message deleted" });
+});
+
 // ============ PHOTOS ============
 
 app.get("/api/photos", requireAuth, async (req: any, res) => {

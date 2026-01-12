@@ -288,6 +288,7 @@ function ProjectChat({ projectId }: { projectId: number }) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const isAdmin = (user as any)?.role === "admin";
 
   const { data: messages, isLoading } = useQuery({
     queryKey: ["/api/projects", projectId, "messages"],
@@ -306,6 +307,16 @@ function ProjectChat({ projectId }: { projectId: number }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "messages"] });
       setMessage("");
+    },
+  });
+
+  const deleteMessageMutation = useMutation({
+    mutationFn: async (messageId: number) => {
+      const res = await apiRequest("DELETE", `/api/projects/${projectId}/messages/${messageId}`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "messages"] });
     },
   });
 
@@ -332,13 +343,21 @@ function ProjectChat({ projectId }: { projectId: number }) {
         {(messages as any[])?.map((msg: any) => {
           const isMe = msg.sender.id === (user as any)?.id;
           return (
-            <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[70%] ${isMe ? "bg-primary text-primary-foreground" : "bg-muted"} rounded-lg px-3 py-2`}>
+            <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"} group`}>
+              <div className={`max-w-[70%] ${isMe ? "bg-primary text-primary-foreground" : "bg-muted"} rounded-lg px-3 py-2 relative`}>
                 {!isMe && <p className="text-xs font-medium mb-1">{msg.sender.firstName} {msg.sender.lastName}</p>}
                 <p className="text-sm">{msg.content}</p>
                 <p className={`text-xs mt-1 ${isMe ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
                   {format(new Date(msg.createdAt), "h:mm a")}
                 </p>
+                {isAdmin && (
+                  <button
+                    onClick={() => deleteMessageMutation.mutate(msg.id)}
+                    className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full hidden group-hover:flex items-center justify-center text-xs"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                )}
               </div>
             </div>
           );
