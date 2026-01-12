@@ -524,6 +524,16 @@ app.post("/api/projects/:id/messages", requireAuth, async (req: any, res) => {
   });
 });
 
+app.delete("/api/projects/:projectId/messages/:messageId", requireAdmin, async (req, res) => {
+  const { projectId, messageId } = req.params;
+  await db.delete(schema.projectMessages)
+    .where(and(
+      eq(schema.projectMessages.id, parseInt(messageId)),
+      eq(schema.projectMessages.projectId, parseInt(projectId))
+    ));
+  res.json({ message: "Message deleted" });
+});
+
 // ============ PHOTOS ============
 
 app.get("/api/photos", requireAuth, async (req: any, res) => {
@@ -638,38 +648,39 @@ app.get("/api/boards", requireAuth, async (req: any, res) => {
   res.json(boards);
 });
 
-app.post("/api/boards", requireAdmin, async (req: any, res) => {
-  const { name, memberIds, allowUserEditing } = req.body;
-  
-  const [board] = await db.insert(schema.boards).values({ 
-    name, 
-    type: 'group',
+app.post("/api/boards", requireAuth, async (req: any, res) => {
+  const { name, memberIds, allowUserEditing, type } = req.body;
+  const chatType = type || 'general'; // 'general' or 'private'
+
+  const [board] = await db.insert(schema.boards).values({
+    name,
+    type: chatType,
     createdBy: req.session.userId,
     allowUserEditing: allowUserEditing || false,
   }).returning();
-  
+
   // Add members
   if (memberIds?.length) {
-    const memberValues = memberIds.map((userId: string) => ({ 
-      boardId: board.id, 
+    const memberValues = memberIds.map((userId: string) => ({
+      boardId: board.id,
       userId,
       canEdit: false,
     }));
     await db.insert(schema.boardMembers).values(memberValues);
   }
-  
+
   // Add creator as member too
   await db.insert(schema.boardMembers).values({
     boardId: board.id,
     userId: req.session.userId,
     canEdit: true,
   }).onConflictDoNothing();
-  
+
   const fullBoard = await db.query.boards.findFirst({
     where: eq(schema.boards.id, board.id),
     with: { members: { with: { user: true } } },
   });
-  
+
   res.status(201).json(fullBoard);
 });
 
@@ -805,8 +816,14 @@ app.post("/api/messages", requireAuth, async (req: any, res) => {
     where: eq(schema.messages.id, msg.id),
     with: { sender: true, photo: true },
   });
-  
+
   res.status(201).json(fullMessage);
+});
+
+app.delete("/api/messages/:id", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  await db.delete(schema.messages).where(eq(schema.messages.id, parseInt(id)));
+  res.json({ message: "Message deleted" });
 });
 
 // ============ STATIC FILES ============
