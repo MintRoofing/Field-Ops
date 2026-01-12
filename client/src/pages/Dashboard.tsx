@@ -51,7 +51,9 @@ export default function Dashboard() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold">Good Morning, {(user as any)?.firstName}</h1>
-        <p className="text-muted-foreground">Here's your activity for today.</p>
+        <p className="text-muted-foreground">
+          {isAdmin ? "Admin Dashboard - Manage your team below." : "Here's your activity for today."}
+        </p>
       </div>
 
       <Card>
