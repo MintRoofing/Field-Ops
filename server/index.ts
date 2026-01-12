@@ -113,6 +113,10 @@ app.get("/api/callback", async (req: any, res) => {
       role: "admin",
       password: hashPassword("demo123"),
     }).returning();
+  } else if (user.role !== "admin") {
+    // Ensure demo user always has admin role
+    await db.update(schema.users).set({ role: "admin" }).where(eq(schema.users.id, user.id));
+    user.role = "admin";
   }
   req.session.userId = user.id;
   res.redirect("/");
