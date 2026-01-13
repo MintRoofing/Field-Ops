@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Plus, Send, Users, User, UserPlus, UserMinus, Settings, Trash2, MessageSquare } from "lucide-react";
+import ChatPhotoUpload from "@/components/ChatPhotoUpload";
 import { format } from "date-fns";
 
 export default function Chat() {
@@ -99,6 +100,34 @@ export default function Chat() {
     },
   });
 
+  const sendPhotoMutation = useMutation({
+    mutationFn: async (data: { boardId: number; url: string; markupData?: any }) => {
+      // First create the photo
+      const photoRes = await apiRequest("POST", "/api/photos", {
+        url: data.url,
+        boardId: data.boardId,
+        markupData: data.markupData,
+        fileType: "image",
+      });
+      const photo = await photoRes.json();
+
+      // Then create the message with the photo
+      const msgRes = await apiRequest("POST", "/api/messages", {
+        boardId: data.boardId,
+        content: "",
+        photoId: photo.id,
+      });
+      return msgRes.json();
+    },
+    onSuccess: () => {
+      refetchMessages();
+      toast({ title: "Photo sent" });
+    },
+    onError: () => {
+      toast({ title: "Failed to send photo", variant: "destructive" });
+    },
+  });
+
   const deleteBoardMutation = useMutation({
     mutationFn: async (boardId: number) => {
       const res = await apiRequest("DELETE", `/api/boards/${boardId}`, {});
@@ -161,6 +190,15 @@ export default function Chat() {
     e.preventDefault();
     if (!message.trim() || !selectedBoard) return;
     sendMessageMutation.mutate({ boardId: selectedBoard.id, content: message });
+  };
+
+  const handleSendPhoto = (photoData: { url: string; markupData?: any }) => {
+    if (!selectedBoard) return;
+    sendPhotoMutation.mutate({
+      boardId: selectedBoard.id,
+      url: photoData.url,
+      markupData: photoData.markupData,
+    });
   };
 
   const memberIds = members?.map((m: any) => m.userId) || [];
@@ -342,13 +380,24 @@ export default function Chat() {
               <div className="space-y-4">
                 {(messages as any[])?.map((msg: any) => {
                   const isOwn = msg.senderId === (user as any)?.id;
+                  const hasPhoto = msg.photo?.url;
                   return (
                     <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"} group`}>
                       <div className={`max-w-[70%] ${isOwn ? "bg-primary text-primary-foreground" : "bg-background"} rounded-lg p-3 relative`}>
                         {!isOwn && (
                           <p className="text-xs font-medium mb-1">{msg.sender?.firstName} {msg.sender?.lastName}</p>
                         )}
-                        <p>{msg.content}</p>
+                        {hasPhoto && (
+                          <div className="mb-2">
+                            <img
+                              src={msg.photo.url}
+                              alt="Shared photo"
+                              className="rounded-lg max-w-full cursor-pointer hover:opacity-90 transition-opacity"
+                              onClick={() => window.open(msg.photo.url, "_blank")}
+                            />
+                          </div>
+                        )}
+                        {msg.content && <p>{msg.content}</p>}
                         <p className={`text-xs mt-1 ${isOwn ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
                           {format(new Date(msg.createdAt), "h:mm a")}
                         </p>
@@ -369,6 +418,7 @@ export default function Chat() {
             </ScrollArea>
 
             <form onSubmit={handleSendMessage} className="p-4 border-t bg-background rounded-b-lg flex gap-2">
+              <ChatPhotoUpload onSendPhoto={handleSendPhoto} disabled={sendPhotoMutation.isPending} />
               <Input
                 placeholder="Type a message..."
                 value={message}
