@@ -338,16 +338,23 @@ app.post("/api/locations", requireAuth, async (req: any, res) => {
 });
 
 app.get("/api/locations/live", requireAuth, async (req, res) => {
-  const locs = await db.query.locations.findMany({ 
-    orderBy: [desc(schema.locations.timestamp)], 
-    limit: 100, 
-    with: { user: true } 
+  // Get all users who are currently clocked in (have active time card with no end time)
+  const activeTimeCards = await db.select().from(schema.timeCards)
+    .where(isNull(schema.timeCards.endTime));
+  const clockedInUserIds = new Set(activeTimeCards.map(tc => tc.userId));
+
+  // Only show locations for clocked-in users
+  const locs = await db.query.locations.findMany({
+    orderBy: [desc(schema.locations.timestamp)],
+    limit: 100,
+    with: { user: true }
   });
   const seen = new Set();
-  const result = locs.filter((l: any) => { 
-    if (seen.has(l.userId)) return false; 
-    seen.add(l.userId); 
-    return true; 
+  const result = locs.filter((l: any) => {
+    if (seen.has(l.userId)) return false;
+    if (!clockedInUserIds.has(l.userId)) return false; // Only show clocked-in users
+    seen.add(l.userId);
+    return true;
   }).map((l: any) => ({ user: l.user, location: l }));
   res.json(result);
 });
