@@ -76,11 +76,26 @@ export const projectMessages = pgTable("project_messages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const contacts = pgTable("contacts", {
+  id: serial("id").primaryKey(),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name"),
+  email: text("email"),
+  phone: text("phone"),
+  company: text("company"),
+  address: text("address"),
+  notes: text("notes"),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const photos = pgTable("photos", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
   projectId: integer("project_id"),
   boardId: integer("board_id"),
+  contactId: integer("contact_id"),
   url: text("url").notNull(),
   fileType: text("file_type").default("image"), // 'image' or 'pdf'
   notes: text("notes"),
@@ -135,10 +150,16 @@ export const projectMessagesRelations = relations(projectMessages, ({ one }) => 
   sender: one(users, { fields: [projectMessages.senderId], references: [users.id] }),
 }));
 
+export const contactsRelations = relations(contacts, ({ one, many }) => ({
+  creator: one(users, { fields: [contacts.createdBy], references: [users.id] }),
+  photos: many(photos),
+}));
+
 export const photosRelations = relations(photos, ({ one }) => ({
   user: one(users, { fields: [photos.userId], references: [users.id] }),
   project: one(projects, { fields: [photos.projectId], references: [projects.id] }),
   board: one(boards, { fields: [photos.boardId], references: [boards.id] }),
+  contact: one(contacts, { fields: [photos.contactId], references: [contacts.id] }),
 }));
 
 export const messagesRelations = relations(messages, ({ one }) => ({

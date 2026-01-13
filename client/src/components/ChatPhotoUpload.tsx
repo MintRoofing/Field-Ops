@@ -1,11 +1,14 @@
 import { useState, useRef, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ReactSketchCanvas, ReactSketchCanvasRef } from "react-sketch-canvas";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Camera, Upload, Image, Pencil, Undo, Trash2, Send, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Camera, Upload, Image, Pencil, Undo, Trash2, Send, X, User } from "lucide-react";
 
 interface ChatPhotoUploadProps {
-  onSendPhoto: (photoData: { url: string; markupData?: any }) => void;
+  onSendPhoto: (photoData: { url: string; markupData?: any; contactId?: number }) => void;
   disabled?: boolean;
 }
 
@@ -14,11 +17,14 @@ export default function ChatPhotoUpload({ onSendPhoto, disabled }: ChatPhotoUplo
   const [mode, setMode] = useState<"select" | "camera" | "edit">("select");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [selectedContactId, setSelectedContactId] = useState<string>("");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<ReactSketchCanvasRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  const { data: contacts } = useQuery({ queryKey: ["/api/contacts"] });
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -101,7 +107,10 @@ export default function ChatPhotoUpload({ onSendPhoto, disabled }: ChatPhotoUplo
       }
     }
 
-    onSendPhoto({ url: finalImageUrl });
+    onSendPhoto({
+      url: finalImageUrl,
+      contactId: selectedContactId ? parseInt(selectedContactId) : undefined,
+    });
     handleClose();
   };
 
@@ -110,6 +119,7 @@ export default function ChatPhotoUpload({ onSendPhoto, disabled }: ChatPhotoUplo
     setCapturedImage(null);
     setMode("select");
     setIsDrawing(false);
+    setSelectedContactId("");
     setIsOpen(false);
   };
 
@@ -218,6 +228,29 @@ export default function ChatPhotoUpload({ onSendPhoto, disabled }: ChatPhotoUplo
                     />
                   )}
                 </div>
+
+                {/* Contact Selector */}
+                {contacts && (contacts as any[]).length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <User className="w-4 h-4" /> Link to Contact (optional)
+                    </Label>
+                    <Select value={selectedContactId} onValueChange={setSelectedContactId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a contact..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">No contact</SelectItem>
+                        {(contacts as any[]).map((contact: any) => (
+                          <SelectItem key={contact.id} value={contact.id.toString()}>
+                            {contact.firstName} {contact.lastName}
+                            {contact.company && ` - ${contact.company}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex gap-2">

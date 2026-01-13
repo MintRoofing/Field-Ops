@@ -9,6 +9,7 @@ import Dashboard from "@/pages/Dashboard";
 import LiveMap from "@/pages/LiveMap";
 import Photos from "@/pages/Photos";
 import Chat from "@/pages/Chat";
+import Contacts from "@/pages/Contacts";
 import Login from "@/pages/Login";
 import Users from "@/pages/Users";
 import TimeTracking from "@/pages/TimeTracking";
@@ -52,6 +53,7 @@ function Router() {
       <Route path="/map"><ProtectedRoute component={LiveMap} /></Route>
       <Route path="/photos"><ProtectedRoute component={Photos} /></Route>
       <Route path="/projects"><ProtectedRoute component={Projects} /></Route>
+      <Route path="/contacts"><ProtectedRoute component={Contacts} /></Route>
       <Route path="/chat"><ProtectedRoute component={Chat} /></Route>
       <Route path="/chat/:boardId"><ProtectedRoute component={Chat} /></Route>
       <Route path="/users"><ProtectedRoute component={Users} adminOnly /></Route>

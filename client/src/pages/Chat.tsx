@@ -101,11 +101,12 @@ export default function Chat() {
   });
 
   const sendPhotoMutation = useMutation({
-    mutationFn: async (data: { boardId: number; url: string; markupData?: any }) => {
+    mutationFn: async (data: { boardId: number; url: string; markupData?: any; contactId?: number }) => {
       // First create the photo
       const photoRes = await apiRequest("POST", "/api/photos", {
         url: data.url,
         boardId: data.boardId,
+        contactId: data.contactId,
         markupData: data.markupData,
         fileType: "image",
       });
@@ -192,12 +193,13 @@ export default function Chat() {
     sendMessageMutation.mutate({ boardId: selectedBoard.id, content: message });
   };
 
-  const handleSendPhoto = (photoData: { url: string; markupData?: any }) => {
+  const handleSendPhoto = (photoData: { url: string; markupData?: any; contactId?: number }) => {
     if (!selectedBoard) return;
     sendPhotoMutation.mutate({
       boardId: selectedBoard.id,
       url: photoData.url,
       markupData: photoData.markupData,
+      contactId: photoData.contactId,
     });
   };
 

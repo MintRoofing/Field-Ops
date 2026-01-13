@@ -555,21 +555,22 @@ app.get("/api/photos", requireAuth, async (req: any, res) => {
   
   const photos = await db.query.photos.findMany({
     where: whereClause,
-    with: { user: true, project: true },
+    with: { user: true, project: true, contact: true },
     orderBy: [desc(schema.photos.createdAt)],
   });
   res.json(photos);
 });
 
 app.post("/api/photos", requireAuth, async (req: any, res) => {
-  const { url, notes, projectId, boardId, markupData, fileType } = req.body;
-  const [photo] = await db.insert(schema.photos).values({ 
-    userId: req.session.userId, 
-    url, 
-    notes, 
+  const { url, notes, projectId, boardId, contactId, markupData, fileType } = req.body;
+  const [photo] = await db.insert(schema.photos).values({
+    userId: req.session.userId,
+    url,
+    notes,
     projectId: projectId ? parseInt(projectId) : null,
     boardId: boardId ? parseInt(boardId) : null,
-    markupData, 
+    contactId: contactId ? parseInt(contactId) : null,
+    markupData,
     fileType: fileType || 'image',
   }).returning();
   res.status(201).json(photo);
@@ -614,17 +615,83 @@ app.put("/api/photos/:id", requireAuth, async (req: any, res) => {
 
 app.delete("/api/photos/:id", requireAuth, async (req: any, res) => {
   const { id } = req.params;
-  
+
   const [photo] = await db.select().from(schema.photos).where(eq(schema.photos.id, parseInt(id)));
   if (!photo) return res.status(404).json({ message: "Photo not found" });
-  
+
   const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.session.userId));
   if (photo.userId !== req.session.userId && user.role !== 'admin') {
     return res.status(403).json({ message: "Not authorized" });
   }
-  
+
   await db.delete(schema.photos).where(eq(schema.photos.id, parseInt(id)));
   res.json({ message: "Photo deleted" });
+});
+
+// ============ CONTACTS ============
+
+app.get("/api/contacts", requireAuth, async (req, res) => {
+  const contacts = await db.query.contacts.findMany({
+    with: { creator: true, photos: true },
+    orderBy: [desc(schema.contacts.createdAt)],
+  });
+  res.json(contacts);
+});
+
+app.get("/api/contacts/:id", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const contact = await db.query.contacts.findFirst({
+    where: eq(schema.contacts.id, parseInt(id)),
+    with: { creator: true, photos: { with: { user: true } } },
+  });
+  if (!contact) return res.status(404).json({ message: "Contact not found" });
+  res.json(contact);
+});
+
+app.post("/api/contacts", requireAuth, async (req: any, res) => {
+  const { firstName, lastName, email, phone, company, address, notes } = req.body;
+  if (!firstName) return res.status(400).json({ message: "First name is required" });
+
+  const [contact] = await db.insert(schema.contacts).values({
+    firstName,
+    lastName,
+    email,
+    phone,
+    company,
+    address,
+    notes,
+    createdBy: req.session.userId,
+  }).returning();
+  res.status(201).json(contact);
+});
+
+app.put("/api/contacts/:id", requireAuth, async (req: any, res) => {
+  const { id } = req.params;
+  const { firstName, lastName, email, phone, company, address, notes } = req.body;
+
+  const [existing] = await db.select().from(schema.contacts).where(eq(schema.contacts.id, parseInt(id)));
+  if (!existing) return res.status(404).json({ message: "Contact not found" });
+
+  const [contact] = await db.update(schema.contacts)
+    .set({ firstName, lastName, email, phone, company, address, notes, updatedAt: new Date() })
+    .where(eq(schema.contacts.id, parseInt(id)))
+    .returning();
+  res.json(contact);
+});
+
+app.delete("/api/contacts/:id", requireAuth, async (req: any, res) => {
+  const { id } = req.params;
+
+  const [existing] = await db.select().from(schema.contacts).where(eq(schema.contacts.id, parseInt(id)));
+  if (!existing) return res.status(404).json({ message: "Contact not found" });
+
+  // Remove contact reference from photos
+  await db.update(schema.photos)
+    .set({ contactId: null })
+    .where(eq(schema.photos.contactId, parseInt(id)));
+
+  await db.delete(schema.contacts).where(eq(schema.contacts.id, parseInt(id)));
+  res.json({ message: "Contact deleted" });
 });
 
 // ============ BOARDS (CHATS) ============

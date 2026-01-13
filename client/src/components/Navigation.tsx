@@ -9,6 +9,7 @@ import {
   Image,
   MessageSquare,
   FolderOpen,
+  Users,
   Settings,
   Menu,
   LogOut,
@@ -18,6 +19,7 @@ const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/map", label: "Live Map", icon: Map },
   { href: "/projects", label: "Projects", icon: FolderOpen },
+  { href: "/contacts", label: "Contacts", icon: Users },
   { href: "/photos", label: "Photos", icon: Image },
   { href: "/chat", label: "Chat", icon: MessageSquare },
 ];
