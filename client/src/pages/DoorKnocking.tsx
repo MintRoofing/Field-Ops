@@ -40,6 +40,7 @@ import {
   Check,
   AlertCircle,
   Bell,
+  History,
 } from "lucide-react";
 
 // Fix Leaflet default icons
@@ -118,6 +119,19 @@ interface DoorPin {
   creator?: { id: string; firstName: string; lastName: string };
   assignee?: { id: string; firstName: string; lastName: string };
   territory?: Territory;
+  createdAt?: string;
+}
+
+interface PinHistoryEntry {
+  id: number;
+  pinId: number;
+  userId: string;
+  action: string;
+  previousValue?: string;
+  newValue?: string;
+  details?: string;
+  createdAt: string;
+  user?: { id: string; firstName: string; lastName: string };
 }
 
 // Map click handler component
@@ -216,6 +230,12 @@ export default function DoorKnocking() {
 
   const { data: reminders = [] } = useQuery<DoorPin[]>({
     queryKey: ["/api/door-pins/reminders"],
+  });
+
+  // Query for pin history when a pin is selected
+  const { data: pinHistory = [], isLoading: historyLoading } = useQuery<PinHistoryEntry[]>({
+    queryKey: [`/api/door-pins/${selectedPin?.id}/history`],
+    enabled: !!selectedPin,
   });
 
   // Mutations
@@ -321,9 +341,10 @@ export default function DoorKnocking() {
       const res = await apiRequest("PUT", `/api/door-pins/${id}`, data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/door-pins"] });
       queryClient.invalidateQueries({ queryKey: ["/api/door-pins/reminders"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/door-pins/${variables.id}/history`] });
       toast({ title: "Pin updated successfully" });
       setIsPinDialogOpen(false);
       setSelectedPin(null);
@@ -1016,10 +1037,11 @@ export default function DoorKnocking() {
             <DialogTitle>{selectedPin ? "Edit Pin" : "New Pin"}</DialogTitle>
           </DialogHeader>
           <Tabs defaultValue="customer" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className={`grid w-full ${selectedPin ? "grid-cols-4" : "grid-cols-3"}`}>
               <TabsTrigger value="customer">Customer Info</TabsTrigger>
               <TabsTrigger value="status">Status & Notes</TabsTrigger>
               <TabsTrigger value="appointment">Appointment</TabsTrigger>
+              {selectedPin && <TabsTrigger value="history">History</TabsTrigger>}
             </TabsList>
 
             <TabsContent value="customer" className="space-y-4 mt-4">
@@ -1179,6 +1201,140 @@ export default function DoorKnocking() {
                 </div>
               </div>
             </TabsContent>
+
+            {selectedPin && (
+              <TabsContent value="history" className="mt-4">
+                <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                  {historyLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
+                    </div>
+                  ) : pinHistory.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-8">
+                      <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p>No history recorded yet</p>
+                    </div>
+                  ) : (
+                    pinHistory.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="flex gap-3 p-3 bg-muted/50 rounded-lg"
+                      >
+                        <div className="flex-shrink-0">
+                          {entry.action === "created" && (
+                            <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
+                              <Plus className="w-4 h-4" />
+                            </div>
+                          )}
+                          {entry.action === "status_changed" && (
+                            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                              <Check className="w-4 h-4" />
+                            </div>
+                          )}
+                          {entry.action === "assigned" && (
+                            <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center">
+                              <UserPlus className="w-4 h-4" />
+                            </div>
+                          )}
+                          {entry.action === "note_updated" && (
+                            <div className="w-8 h-8 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center">
+                              <Edit2 className="w-4 h-4" />
+                            </div>
+                          )}
+                          {entry.action === "appointment_set" && (
+                            <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center">
+                              <Calendar className="w-4 h-4" />
+                            </div>
+                          )}
+                          {entry.action === "reminder_set" && (
+                            <div className="w-8 h-8 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center">
+                              <Bell className="w-4 h-4" />
+                            </div>
+                          )}
+                          {!["created", "status_changed", "assigned", "note_updated", "appointment_set", "reminder_set"].includes(entry.action) && (
+                            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center">
+                              <History className="w-4 h-4" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-sm">
+                              {entry.user
+                                ? `${entry.user.firstName} ${entry.user.lastName}`
+                                : "Unknown User"}
+                            </span>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              {new Date(entry.createdAt).toLocaleDateString()}{" "}
+                              {new Date(entry.createdAt).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-0.5">
+                            {entry.details || entry.action.replace(/_/g, " ")}
+                          </p>
+                          {entry.previousValue && entry.newValue && entry.action === "status_changed" && (
+                            <div className="flex items-center gap-2 mt-1 text-xs">
+                              <span
+                                className="px-2 py-0.5 rounded text-white"
+                                style={{ backgroundColor: pinColors[entry.previousValue] || "#6b7280" }}
+                              >
+                                {statusLabels[entry.previousValue] || entry.previousValue}
+                              </span>
+                              <span className="text-muted-foreground">→</span>
+                              <span
+                                className="px-2 py-0.5 rounded text-white"
+                                style={{ backgroundColor: pinColors[entry.newValue] || "#6b7280" }}
+                              >
+                                {statusLabels[entry.newValue] || entry.newValue}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Pin info summary */}
+                {selectedPin && (
+                  <div className="mt-4 pt-4 border-t">
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Created by:</span>{" "}
+                        <span className="font-medium">
+                          {selectedPin.creator
+                            ? `${selectedPin.creator.firstName} ${selectedPin.creator.lastName}`
+                            : "Unknown"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Assigned to:</span>{" "}
+                        <span className="font-medium">
+                          {selectedPin.assignee
+                            ? `${selectedPin.assignee.firstName} ${selectedPin.assignee.lastName}`
+                            : "Unassigned"}
+                        </span>
+                      </div>
+                      {selectedPin.createdAt && (
+                        <div className="col-span-2">
+                          <span className="text-muted-foreground">Created:</span>{" "}
+                          <span className="font-medium">
+                            {new Date(selectedPin.createdAt).toLocaleDateString()}{" "}
+                            {new Date(selectedPin.createdAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </TabsContent>
+            )}
           </Tabs>
 
           <DialogFooter className="flex justify-between mt-4">
