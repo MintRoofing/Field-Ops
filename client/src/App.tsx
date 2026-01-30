@@ -14,6 +14,7 @@ import Users from "@/pages/Users";
 import TimeTracking from "@/pages/TimeTracking";
 import Projects from "@/pages/Projects";
 import Settings from "@/pages/Settings";
+import DoorKnocking from "@/pages/DoorKnocking";
 
 function ProtectedRoute({ component: Component, adminOnly = false }: { component: React.ComponentType; adminOnly?: boolean }) {
   const { user, isLoading } = useAuth();
@@ -50,6 +51,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/"><ProtectedRoute component={Dashboard} /></Route>
       <Route path="/map"><ProtectedRoute component={LiveMap} /></Route>
+      <Route path="/door-knocking"><ProtectedRoute component={DoorKnocking} /></Route>
       <Route path="/photos"><ProtectedRoute component={Photos} /></Route>
       <Route path="/projects"><ProtectedRoute component={Projects} /></Route>
       <Route path="/chat"><ProtectedRoute component={Chat} /></Route>
