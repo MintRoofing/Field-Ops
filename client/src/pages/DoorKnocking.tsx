@@ -1086,14 +1086,25 @@ export default function DoorKnocking() {
                   onValueChange={(value) => setPinForm((prev) => ({ ...prev, status: value }))}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{ backgroundColor: pinColors[pinForm.status] || pinColors.not_contacted }}
+                        />
+                        {statusLabels[pinForm.status] || "Select status"}
+                      </div>
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {Object.entries(statusLabels).map(([value, label]) => (
                       <SelectItem key={value} value={value}>
                         <div className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full ${statusColors[value]}`} />
-                          {label}
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: pinColors[value] }}
+                          />
+                          <span>{label}</span>
                         </div>
                       </SelectItem>
                     ))}
