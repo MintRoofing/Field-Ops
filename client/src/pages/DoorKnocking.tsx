@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MapContainer, TileLayer, Marker, Popup, Polygon, useMapEvents, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polygon, useMapEvents, useMap, CircleMarker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { useAuth } from "@/hooks/use-auth";
@@ -424,10 +424,16 @@ export default function DoorKnocking() {
         setSelectedTerritory(territory);
         setPinForm((prev) => ({ ...prev, assignedTo: user?.id || "" }));
         setIsPinDialogOpen(true);
+      } else if (territories.length === 0) {
+        toast({
+          title: "No territories",
+          description: "An admin needs to draw territories first before pins can be dropped",
+          variant: "destructive",
+        });
       } else {
         toast({
-          title: "Invalid location",
-          description: "Please drop pins only within assigned territories",
+          title: "Outside territory",
+          description: "Please click inside a territory boundary to drop a pin",
           variant: "destructive",
         });
       }
@@ -552,39 +558,56 @@ export default function DoorKnocking() {
             {isAdmin ? "Manage territories and track door-to-door sales" : "Your assigned territories"}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button
             variant={isNewPinMode ? "default" : "outline"}
             onClick={() => {
               setIsNewPinMode(!isNewPinMode);
               setIsDrawingTerritory(false);
+              setDrawingPoints([]);
             }}
           >
             <MapPin className="w-4 h-4 mr-2" />
             {isNewPinMode ? "Cancel Pin" : "Drop Pin"}
           </Button>
           {isAdmin && (
-            <Button
-              variant={isDrawingTerritory ? "default" : "outline"}
-              onClick={() => {
-                if (isDrawingTerritory && drawingPoints.length >= 3) {
-                  setIsTerritoryDialogOpen(true);
-                } else {
-                  setIsDrawingTerritory(!isDrawingTerritory);
-                  setIsNewPinMode(false);
+            <>
+              <Button
+                variant={isDrawingTerritory ? "default" : "outline"}
+                onClick={() => {
                   if (!isDrawingTerritory) {
+                    // Start drawing mode
+                    setIsDrawingTerritory(true);
+                    setIsNewPinMode(false);
+                    setDrawingPoints([]);
+                  } else {
+                    // Cancel drawing mode
+                    setIsDrawingTerritory(false);
                     setDrawingPoints([]);
                   }
-                }
-              }}
-            >
-              <Pencil className="w-4 h-4 mr-2" />
-              {isDrawingTerritory
-                ? drawingPoints.length >= 3
-                  ? "Save Territory"
-                  : `Drawing (${drawingPoints.length} points)`
-                : "Draw Territory"}
-            </Button>
+                }}
+              >
+                <Pencil className="w-4 h-4 mr-2" />
+                {isDrawingTerritory ? "Cancel Drawing" : "Draw Territory"}
+              </Button>
+              {isDrawingTerritory && drawingPoints.length >= 3 && (
+                <Button
+                  variant="default"
+                  onClick={() => setIsTerritoryDialogOpen(true)}
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Territory ({drawingPoints.length} points)
+                </Button>
+              )}
+              {isDrawingTerritory && drawingPoints.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={() => setDrawingPoints((prev) => prev.slice(0, -1))}
+                >
+                  Undo Point
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -592,10 +615,10 @@ export default function DoorKnocking() {
       {/* Instructions banner */}
       {(isNewPinMode || isDrawingTerritory) && (
         <div className="bg-primary/10 text-primary px-4 py-2 rounded-lg text-sm flex items-center gap-2">
-          <AlertCircle className="w-4 h-4" />
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {isNewPinMode
-            ? "Click on the map within a territory to drop a pin"
-            : "Click on the map to draw territory boundaries. Click 'Save Territory' when done (minimum 3 points)."}
+            ? `Click on the map within a territory to drop a pin. ${territories.length === 0 ? "(No territories exist yet - admin needs to draw one first)" : ""}`
+            : `Click anywhere on the map to add boundary points. You have ${drawingPoints.length} point${drawingPoints.length !== 1 ? "s" : ""}. Need at least 3 to save.`}
         </div>
       )}
 
@@ -822,9 +845,19 @@ export default function DoorKnocking() {
             {/* Drawing points markers */}
             {isDrawingTerritory &&
               drawingPoints.map((point, index) => (
-                <Marker key={index} position={[point.lat, point.lng]}>
+                <CircleMarker
+                  key={index}
+                  center={[point.lat, point.lng]}
+                  radius={8}
+                  pathOptions={{
+                    color: "#fff",
+                    fillColor: territoryForm.color,
+                    fillOpacity: 1,
+                    weight: 2,
+                  }}
+                >
                   <Popup>Point {index + 1}</Popup>
-                </Marker>
+                </CircleMarker>
               ))}
 
             {/* Door pins */}
