@@ -41,6 +41,9 @@ import {
   AlertCircle,
   Bell,
   History,
+  List,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 
 // Fix Leaflet default icons
@@ -198,6 +201,10 @@ export default function DoorKnocking() {
   const [territoryForm, setTerritoryForm] = useState({ name: "", description: "", color: "#3b82f6" });
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [assignUserId, setAssignUserId] = useState("");
+
+  // Master list state
+  const [showMasterList, setShowMasterList] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   // Pin form state
   const [pinForm, setPinForm] = useState({
@@ -542,6 +549,42 @@ export default function DoorKnocking() {
     };
   }, [pins]);
 
+  // Group visible pins by status for master list
+  const groupedPins = useMemo(() => {
+    const groups: Record<string, DoorPin[]> = {};
+    const statusOrder = ["sold", "urgent", "maybe", "not_contacted", "cold_lead", "angry"];
+
+    // Initialize groups in desired order
+    statusOrder.forEach(status => {
+      groups[status] = [];
+    });
+
+    // Populate groups
+    visiblePins.forEach(pin => {
+      const status = pin.status || "not_contacted";
+      if (groups[status]) {
+        groups[status].push(pin);
+      } else {
+        groups[status] = [pin];
+      }
+    });
+
+    return groups;
+  }, [visiblePins]);
+
+  // Toggle group collapse
+  const toggleGroupCollapse = (status: string) => {
+    setCollapsedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(status)) {
+        newSet.delete(status);
+      } else {
+        newSet.add(status);
+      }
+      return newSet;
+    });
+  };
+
   if (territoriesLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -561,6 +604,13 @@ export default function DoorKnocking() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button
+            variant={showMasterList ? "default" : "outline"}
+            onClick={() => setShowMasterList(!showMasterList)}
+          >
+            <List className="w-4 h-4 mr-2" />
+            {showMasterList ? "Hide List" : "Master List"}
+          </Button>
           <Button
             variant={isNewPinMode ? "default" : "outline"}
             onClick={() => {
@@ -796,6 +846,94 @@ export default function DoorKnocking() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Master List Panel */}
+        {showMasterList && (
+          <div className="w-96 flex-shrink-0 flex flex-col gap-4 overflow-hidden border rounded-2xl bg-background">
+            <div className="p-4 border-b">
+              <h2 className="font-semibold text-lg">
+                {selectedTerritory ? selectedTerritory.name : "All Territories"} - Pins List
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {visiblePins.length} total pins
+              </p>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {Object.entries(groupedPins).map(([status, pinsInGroup]) => {
+                if (pinsInGroup.length === 0) return null;
+                const isCollapsed = collapsedGroups.has(status);
+
+                return (
+                  <div key={status} className="border rounded-lg overflow-hidden">
+                    <button
+                      className="w-full flex items-center justify-between p-3 hover:bg-muted/50 transition-colors"
+                      onClick={() => toggleGroupCollapse(status)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-4 h-4 rounded-full"
+                          style={{ backgroundColor: pinColors[status] || "#6b7280" }}
+                        />
+                        <span className="font-medium">{statusLabels[status] || status}</span>
+                        <span className="text-sm text-muted-foreground">({pinsInGroup.length})</span>
+                      </div>
+                      {isCollapsed ? (
+                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                      )}
+                    </button>
+                    {!isCollapsed && (
+                      <div className="border-t divide-y">
+                        {pinsInGroup.map((pin) => (
+                          <div
+                            key={pin.id}
+                            className="p-3 hover:bg-muted/30 cursor-pointer transition-colors"
+                            onClick={() => handlePinClick(pin)}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <div className="font-medium truncate">
+                                  {pin.customerName || "No name"}
+                                </div>
+                                <div className="text-sm text-muted-foreground truncate">
+                                  {pin.address || "No address"}
+                                </div>
+                                {pin.customerPhone && (
+                                  <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                                    <Phone className="w-3 h-3" />
+                                    {pin.customerPhone}
+                                  </div>
+                                )}
+                              </div>
+                              {pin.assignee && (
+                                <div className="text-xs bg-muted px-2 py-1 rounded whitespace-nowrap">
+                                  {pin.assignee.firstName} {pin.assignee.lastName?.charAt(0)}.
+                                </div>
+                              )}
+                            </div>
+                            {pin.appointmentDate && (
+                              <div className="text-xs text-muted-foreground flex items-center gap-1 mt-2">
+                                <Calendar className="w-3 h-3" />
+                                Appt: {new Date(pin.appointmentDate).toLocaleDateString()}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {visiblePins.length === 0 && (
+                <div className="text-center text-muted-foreground py-8">
+                  <MapPin className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No pins in {selectedTerritory ? "this territory" : "any territory"}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Map */}
         <div className="flex-1 rounded-2xl overflow-hidden border">
