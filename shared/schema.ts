@@ -222,8 +222,26 @@ export const territoryAssignmentsRelations = relations(territoryAssignments, ({ 
   assigner: one(users, { fields: [territoryAssignments.assignedBy], references: [users.id] }),
 }));
 
-export const doorPinsRelations = relations(doorPins, ({ one }) => ({
+export const doorPinsRelations = relations(doorPins, ({ one, many }) => ({
   territory: one(territories, { fields: [doorPins.territoryId], references: [territories.id] }),
   creator: one(users, { fields: [doorPins.createdBy], references: [users.id] }),
   assignee: one(users, { fields: [doorPins.assignedTo], references: [users.id] }),
+  history: many(pinHistory),
+}));
+
+// Pin History/Activity Log
+export const pinHistory = pgTable("pin_history", {
+  id: serial("id").primaryKey(),
+  pinId: integer("pin_id").notNull(),
+  userId: text("user_id").notNull(), // Who performed the action
+  action: varchar("action").notNull(), // created, status_changed, assigned, note_added, appointment_set, etc.
+  previousValue: text("previous_value"), // Previous value (for changes)
+  newValue: text("new_value"), // New value (for changes)
+  details: text("details"), // Additional details/description
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const pinHistoryRelations = relations(pinHistory, ({ one }) => ({
+  pin: one(doorPins, { fields: [pinHistory.pinId], references: [doorPins.id] }),
+  user: one(users, { fields: [pinHistory.userId], references: [users.id] }),
 }));

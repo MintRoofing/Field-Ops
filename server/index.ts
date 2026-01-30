@@ -1045,6 +1045,16 @@ app.post("/api/door-pins", requireAuth, async (req: any, res) => {
     assignedTo: req.session.userId,
   }).returning();
 
+  // Create history entry for pin creation
+  await createPinHistoryEntry(
+    pin.id,
+    req.session.userId,
+    "created",
+    null,
+    null,
+    `Pin created at ${address || `(${lat}, ${lng})`}`
+  );
+
   const fullPin = await db.query.doorPins.findFirst({
     where: eq(schema.doorPins.id, pin.id),
     with: { creator: true, assignee: true, territory: true },
@@ -1083,26 +1093,103 @@ app.put("/api/door-pins/:id", requireAuth, async (req: any, res) => {
     updatedAt: new Date(),
   };
 
+  // Track changes for history
+  const historyEntries: { action: string; previousValue: string | null; newValue: string | null; details: string | null }[] = [];
+
   if (customerName !== undefined) updateData.customerName = customerName;
   if (customerPhone !== undefined) updateData.customerPhone = customerPhone;
   if (customerEmail !== undefined) updateData.customerEmail = customerEmail;
   if (address !== undefined) updateData.address = address;
-  if (notes !== undefined) updateData.notes = notes;
-  if (status !== undefined) {
+
+  if (notes !== undefined && notes !== existingPin.notes) {
+    updateData.notes = notes;
+    historyEntries.push({
+      action: "note_updated",
+      previousValue: existingPin.notes,
+      newValue: notes,
+      details: "Notes updated"
+    });
+  }
+
+  if (status !== undefined && status !== existingPin.status) {
     updateData.status = status;
     if (['contacted', 'interested', 'not_interested', 'follow_up', 'sold'].includes(status)) {
       updateData.lastContactedAt = new Date();
     }
+    historyEntries.push({
+      action: "status_changed",
+      previousValue: existingPin.status,
+      newValue: status,
+      details: `Status changed from ${existingPin.status} to ${status}`
+    });
   }
-  if (assignedTo !== undefined) updateData.assignedTo = assignedTo;
-  if (appointmentDate !== undefined) updateData.appointmentDate = appointmentDate ? new Date(appointmentDate) : null;
+
+  if (assignedTo !== undefined && assignedTo !== existingPin.assignedTo) {
+    updateData.assignedTo = assignedTo;
+    // Get assignee name for history
+    let assigneeName = assignedTo;
+    if (assignedTo) {
+      const [assignee] = await db.select().from(schema.users).where(eq(schema.users.id, assignedTo));
+      if (assignee) assigneeName = `${assignee.firstName} ${assignee.lastName}`;
+    }
+    historyEntries.push({
+      action: "assigned",
+      previousValue: existingPin.assignedTo,
+      newValue: assignedTo,
+      details: assignedTo ? `Assigned to ${assigneeName}` : "Assignment removed"
+    });
+  }
+
+  if (appointmentDate !== undefined) {
+    const newApptDate = appointmentDate ? new Date(appointmentDate) : null;
+    const existingApptDate = existingPin.appointmentDate ? new Date(existingPin.appointmentDate).toISOString() : null;
+    const newApptDateStr = newApptDate ? newApptDate.toISOString() : null;
+
+    if (existingApptDate !== newApptDateStr) {
+      updateData.appointmentDate = newApptDate;
+      historyEntries.push({
+        action: "appointment_set",
+        previousValue: existingApptDate,
+        newValue: newApptDateStr,
+        details: newApptDate ? `Appointment set for ${newApptDate.toLocaleDateString()}` : "Appointment removed"
+      });
+    }
+  }
+
   if (appointmentNotes !== undefined) updateData.appointmentNotes = appointmentNotes;
-  if (reminderDate !== undefined) updateData.reminderDate = reminderDate ? new Date(reminderDate) : null;
+
+  if (reminderDate !== undefined) {
+    const newReminderDate = reminderDate ? new Date(reminderDate) : null;
+    const existingReminderDate = existingPin.reminderDate ? new Date(existingPin.reminderDate).toISOString() : null;
+    const newReminderDateStr = newReminderDate ? newReminderDate.toISOString() : null;
+
+    if (existingReminderDate !== newReminderDateStr) {
+      updateData.reminderDate = newReminderDate;
+      historyEntries.push({
+        action: "reminder_set",
+        previousValue: existingReminderDate,
+        newValue: newReminderDateStr,
+        details: newReminderDate ? `Reminder set for ${newReminderDate.toLocaleDateString()}` : "Reminder removed"
+      });
+    }
+  }
 
   const [pin] = await db.update(schema.doorPins)
     .set(updateData)
     .where(eq(schema.doorPins.id, parseInt(id)))
     .returning();
+
+  // Create history entries for all tracked changes
+  for (const entry of historyEntries) {
+    await createPinHistoryEntry(
+      pin.id,
+      req.session.userId,
+      entry.action,
+      entry.previousValue,
+      entry.newValue,
+      entry.details
+    );
+  }
 
   const fullPin = await db.query.doorPins.findFirst({
     where: eq(schema.doorPins.id, pin.id),
@@ -1128,9 +1215,63 @@ app.delete("/api/door-pins/:id", requireAuth, async (req: any, res) => {
     return res.status(403).json({ message: "Not authorized to delete this pin" });
   }
 
+  // Delete associated history first
+  await db.delete(schema.pinHistory).where(eq(schema.pinHistory.pinId, parseInt(id)));
   await db.delete(schema.doorPins).where(eq(schema.doorPins.id, parseInt(id)));
   res.json({ message: "Pin deleted" });
 });
+
+// ============ PIN HISTORY ============
+
+// Get history for a specific pin
+app.get("/api/door-pins/:id/history", requireAuth, async (req: any, res) => {
+  const { id } = req.params;
+
+  // Get the pin to check territory access
+  const [existingPin] = await db.select().from(schema.doorPins).where(eq(schema.doorPins.id, parseInt(id)));
+  if (!existingPin) return res.status(404).json({ message: "Pin not found" });
+
+  // Check if user has access
+  const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.session.userId));
+  if (user.role !== 'admin') {
+    const assignment = await db.select().from(schema.territoryAssignments)
+      .where(and(
+        eq(schema.territoryAssignments.territoryId, existingPin.territoryId),
+        eq(schema.territoryAssignments.userId, req.session.userId)
+      ));
+
+    if (assignment.length === 0) {
+      return res.status(403).json({ message: "Not assigned to this territory" });
+    }
+  }
+
+  const history = await db.query.pinHistory.findMany({
+    where: eq(schema.pinHistory.pinId, parseInt(id)),
+    with: { user: true },
+    orderBy: [desc(schema.pinHistory.createdAt)],
+  });
+
+  res.json(history);
+});
+
+// Helper function to create history entry
+async function createPinHistoryEntry(
+  pinId: number,
+  userId: string,
+  action: string,
+  previousValue?: string | null,
+  newValue?: string | null,
+  details?: string | null
+) {
+  await db.insert(schema.pinHistory).values({
+    pinId,
+    userId,
+    action,
+    previousValue,
+    newValue,
+    details,
+  });
+}
 
 // Get pins with upcoming appointments/reminders
 app.get("/api/door-pins/reminders", requireAuth, async (req: any, res) => {
