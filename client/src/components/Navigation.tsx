@@ -12,11 +12,13 @@ import {
   Settings,
   Menu,
   LogOut,
+  MapPin,
 } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/map", label: "Live Map", icon: Map },
+  { href: "/door-knocking", label: "Door Knocking", icon: MapPin },
   { href: "/projects", label: "Projects", icon: FolderOpen },
   { href: "/photos", label: "Photos", icon: Image },
   { href: "/chat", label: "Chat", icon: MessageSquare },

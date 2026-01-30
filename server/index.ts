@@ -826,6 +826,358 @@ app.delete("/api/messages/:id", requireAdmin, async (req, res) => {
   res.json({ message: "Message deleted" });
 });
 
+// ============ DOOR KNOCKING - TERRITORIES ============
+
+app.get("/api/territories", requireAuth, async (req: any, res) => {
+  const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.session.userId));
+  const isAdmin = user.role === 'admin';
+
+  const territories = await db.query.territories.findMany({
+    with: {
+      assignments: { with: { user: true } },
+      creator: true,
+    },
+    orderBy: [desc(schema.territories.createdAt)],
+  });
+
+  // Non-admins only see territories they're assigned to
+  if (!isAdmin) {
+    const assignedTerritories = territories.filter(t =>
+      t.assignments.some(a => a.userId === req.session.userId)
+    );
+    return res.json(assignedTerritories);
+  }
+
+  res.json(territories);
+});
+
+app.post("/api/territories", requireAdmin, async (req: any, res) => {
+  const { name, description, boundaries, color } = req.body;
+
+  if (!name || !boundaries || !Array.isArray(boundaries)) {
+    return res.status(400).json({ message: "Name and boundaries are required" });
+  }
+
+  const [territory] = await db.insert(schema.territories).values({
+    name,
+    description,
+    boundaries,
+    color: color || "#3b82f6",
+    createdBy: req.session.userId,
+  }).returning();
+
+  res.status(201).json(territory);
+});
+
+app.put("/api/territories/:id", requireAdmin, async (req: any, res) => {
+  const { id } = req.params;
+  const { name, description, boundaries, color } = req.body;
+
+  const [territory] = await db.update(schema.territories)
+    .set({
+      name,
+      description,
+      boundaries,
+      color,
+      updatedAt: new Date()
+    })
+    .where(eq(schema.territories.id, parseInt(id)))
+    .returning();
+
+  if (!territory) return res.status(404).json({ message: "Territory not found" });
+  res.json(territory);
+});
+
+app.delete("/api/territories/:id", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  // Delete related data first
+  await db.delete(schema.doorPins).where(eq(schema.doorPins.territoryId, parseInt(id)));
+  await db.delete(schema.territoryAssignments).where(eq(schema.territoryAssignments.territoryId, parseInt(id)));
+  await db.delete(schema.territories).where(eq(schema.territories.id, parseInt(id)));
+
+  res.json({ message: "Territory deleted" });
+});
+
+// ============ TERRITORY ASSIGNMENTS ============
+
+app.get("/api/territories/:id/assignments", requireAuth, async (req, res) => {
+  const { id } = req.params;
+
+  const assignments = await db.query.territoryAssignments.findMany({
+    where: eq(schema.territoryAssignments.territoryId, parseInt(id)),
+    with: { user: true, assigner: true },
+  });
+
+  res.json(assignments);
+});
+
+app.post("/api/territories/:id/assignments", requireAdmin, async (req: any, res) => {
+  const { id } = req.params;
+  const { userId } = req.body;
+
+  // Check if already assigned
+  const existing = await db.select().from(schema.territoryAssignments)
+    .where(and(
+      eq(schema.territoryAssignments.territoryId, parseInt(id)),
+      eq(schema.territoryAssignments.userId, userId)
+    ));
+
+  if (existing.length > 0) {
+    return res.status(400).json({ message: "User already assigned to this territory" });
+  }
+
+  const [assignment] = await db.insert(schema.territoryAssignments).values({
+    territoryId: parseInt(id),
+    userId,
+    assignedBy: req.session.userId,
+  }).returning();
+
+  const fullAssignment = await db.query.territoryAssignments.findFirst({
+    where: eq(schema.territoryAssignments.id, assignment.id),
+    with: { user: true, assigner: true },
+  });
+
+  res.status(201).json(fullAssignment);
+});
+
+app.delete("/api/territories/:id/assignments/:userId", requireAdmin, async (req, res) => {
+  const { id, userId } = req.params;
+
+  await db.delete(schema.territoryAssignments)
+    .where(and(
+      eq(schema.territoryAssignments.territoryId, parseInt(id)),
+      eq(schema.territoryAssignments.userId, userId)
+    ));
+
+  res.json({ message: "Assignment removed" });
+});
+
+// ============ DOOR PINS ============
+
+app.get("/api/door-pins", requireAuth, async (req: any, res) => {
+  const { territoryId } = req.query;
+  const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.session.userId));
+  const isAdmin = user.role === 'admin';
+
+  let pins;
+
+  if (territoryId) {
+    // Check if user has access to this territory
+    if (!isAdmin) {
+      const assignment = await db.select().from(schema.territoryAssignments)
+        .where(and(
+          eq(schema.territoryAssignments.territoryId, parseInt(territoryId as string)),
+          eq(schema.territoryAssignments.userId, req.session.userId)
+        ));
+
+      if (assignment.length === 0) {
+        return res.status(403).json({ message: "Not assigned to this territory" });
+      }
+    }
+
+    pins = await db.query.doorPins.findMany({
+      where: eq(schema.doorPins.territoryId, parseInt(territoryId as string)),
+      with: { creator: true, assignee: true, territory: true },
+      orderBy: [desc(schema.doorPins.createdAt)],
+    });
+  } else {
+    // Get pins from all accessible territories
+    if (isAdmin) {
+      pins = await db.query.doorPins.findMany({
+        with: { creator: true, assignee: true, territory: true },
+        orderBy: [desc(schema.doorPins.createdAt)],
+      });
+    } else {
+      // Get user's assigned territories
+      const assignments = await db.select().from(schema.territoryAssignments)
+        .where(eq(schema.territoryAssignments.userId, req.session.userId));
+
+      const territoryIds = assignments.map(a => a.territoryId);
+
+      if (territoryIds.length === 0) {
+        return res.json([]);
+      }
+
+      pins = await db.query.doorPins.findMany({
+        where: inArray(schema.doorPins.territoryId, territoryIds),
+        with: { creator: true, assignee: true, territory: true },
+        orderBy: [desc(schema.doorPins.createdAt)],
+      });
+    }
+  }
+
+  res.json(pins);
+});
+
+app.post("/api/door-pins", requireAuth, async (req: any, res) => {
+  const { territoryId, lat, lng, customerName, customerPhone, customerEmail, address, notes, status } = req.body;
+
+  if (!territoryId || lat === undefined || lng === undefined) {
+    return res.status(400).json({ message: "Territory ID, lat, and lng are required" });
+  }
+
+  // Check if user has access to this territory
+  const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.session.userId));
+  if (user.role !== 'admin') {
+    const assignment = await db.select().from(schema.territoryAssignments)
+      .where(and(
+        eq(schema.territoryAssignments.territoryId, parseInt(territoryId)),
+        eq(schema.territoryAssignments.userId, req.session.userId)
+      ));
+
+    if (assignment.length === 0) {
+      return res.status(403).json({ message: "Not assigned to this territory" });
+    }
+  }
+
+  const [pin] = await db.insert(schema.doorPins).values({
+    territoryId: parseInt(territoryId),
+    lat,
+    lng,
+    customerName,
+    customerPhone,
+    customerEmail,
+    address,
+    notes,
+    status: status || "not_contacted",
+    createdBy: req.session.userId,
+    assignedTo: req.session.userId,
+  }).returning();
+
+  const fullPin = await db.query.doorPins.findFirst({
+    where: eq(schema.doorPins.id, pin.id),
+    with: { creator: true, assignee: true, territory: true },
+  });
+
+  res.status(201).json(fullPin);
+});
+
+app.put("/api/door-pins/:id", requireAuth, async (req: any, res) => {
+  const { id } = req.params;
+  const {
+    customerName, customerPhone, customerEmail, address,
+    notes, status, assignedTo,
+    appointmentDate, appointmentNotes, reminderDate
+  } = req.body;
+
+  // Get the pin to check territory access
+  const [existingPin] = await db.select().from(schema.doorPins).where(eq(schema.doorPins.id, parseInt(id)));
+  if (!existingPin) return res.status(404).json({ message: "Pin not found" });
+
+  // Check if user has access
+  const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.session.userId));
+  if (user.role !== 'admin') {
+    const assignment = await db.select().from(schema.territoryAssignments)
+      .where(and(
+        eq(schema.territoryAssignments.territoryId, existingPin.territoryId),
+        eq(schema.territoryAssignments.userId, req.session.userId)
+      ));
+
+    if (assignment.length === 0) {
+      return res.status(403).json({ message: "Not assigned to this territory" });
+    }
+  }
+
+  const updateData: any = {
+    updatedAt: new Date(),
+  };
+
+  if (customerName !== undefined) updateData.customerName = customerName;
+  if (customerPhone !== undefined) updateData.customerPhone = customerPhone;
+  if (customerEmail !== undefined) updateData.customerEmail = customerEmail;
+  if (address !== undefined) updateData.address = address;
+  if (notes !== undefined) updateData.notes = notes;
+  if (status !== undefined) {
+    updateData.status = status;
+    if (['contacted', 'interested', 'not_interested', 'follow_up', 'sold'].includes(status)) {
+      updateData.lastContactedAt = new Date();
+    }
+  }
+  if (assignedTo !== undefined) updateData.assignedTo = assignedTo;
+  if (appointmentDate !== undefined) updateData.appointmentDate = appointmentDate ? new Date(appointmentDate) : null;
+  if (appointmentNotes !== undefined) updateData.appointmentNotes = appointmentNotes;
+  if (reminderDate !== undefined) updateData.reminderDate = reminderDate ? new Date(reminderDate) : null;
+
+  const [pin] = await db.update(schema.doorPins)
+    .set(updateData)
+    .where(eq(schema.doorPins.id, parseInt(id)))
+    .returning();
+
+  const fullPin = await db.query.doorPins.findFirst({
+    where: eq(schema.doorPins.id, pin.id),
+    with: { creator: true, assignee: true, territory: true },
+  });
+
+  res.json(fullPin);
+});
+
+app.delete("/api/door-pins/:id", requireAuth, async (req: any, res) => {
+  const { id } = req.params;
+
+  // Get the pin to check access
+  const [existingPin] = await db.select().from(schema.doorPins).where(eq(schema.doorPins.id, parseInt(id)));
+  if (!existingPin) return res.status(404).json({ message: "Pin not found" });
+
+  // Check if user has access (admin, creator, or assigned to territory)
+  const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.session.userId));
+  const isAdmin = user.role === 'admin';
+  const isCreator = existingPin.createdBy === req.session.userId;
+
+  if (!isAdmin && !isCreator) {
+    return res.status(403).json({ message: "Not authorized to delete this pin" });
+  }
+
+  await db.delete(schema.doorPins).where(eq(schema.doorPins.id, parseInt(id)));
+  res.json({ message: "Pin deleted" });
+});
+
+// Get pins with upcoming appointments/reminders
+app.get("/api/door-pins/reminders", requireAuth, async (req: any, res) => {
+  const [user] = await db.select().from(schema.users).where(eq(schema.users.id, req.session.userId));
+  const isAdmin = user.role === 'admin';
+
+  const now = new Date();
+  const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  let pins;
+
+  if (isAdmin) {
+    pins = await db.query.doorPins.findMany({
+      with: { creator: true, assignee: true, territory: true },
+      orderBy: [schema.doorPins.appointmentDate],
+    });
+  } else {
+    const assignments = await db.select().from(schema.territoryAssignments)
+      .where(eq(schema.territoryAssignments.userId, req.session.userId));
+
+    const territoryIds = assignments.map(a => a.territoryId);
+
+    if (territoryIds.length === 0) {
+      return res.json([]);
+    }
+
+    pins = await db.query.doorPins.findMany({
+      where: inArray(schema.doorPins.territoryId, territoryIds),
+      with: { creator: true, assignee: true, territory: true },
+      orderBy: [schema.doorPins.appointmentDate],
+    });
+  }
+
+  // Filter for pins with upcoming appointments or reminders
+  const pinsWithReminders = pins.filter((pin: any) => {
+    const hasUpcomingAppointment = pin.appointmentDate &&
+      new Date(pin.appointmentDate) >= now &&
+      new Date(pin.appointmentDate) <= weekFromNow;
+    const hasUpcomingReminder = pin.reminderDate &&
+      new Date(pin.reminderDate) >= now &&
+      new Date(pin.reminderDate) <= weekFromNow;
+    return hasUpcomingAppointment || hasUpcomingReminder;
+  });
+
+  res.json(pinsWithReminders);
+});
+
 // ============ STATIC FILES ============
 
 const distPath = path.resolve(__dirname, "public");

@@ -108,6 +108,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   messages: many(messages),
   boardMemberships: many(boardMembers),
   projectMemberships: many(projectMembers),
+  territoryAssignments: many(territoryAssignments),
+  createdPins: many(doorPins),
 }));
 
 export const timeCardsRelations = relations(timeCards, ({ one }) => ({
@@ -157,4 +159,71 @@ export const boardsRelations = relations(boards, ({ many, one }) => ({
 export const boardMembersRelations = relations(boardMembers, ({ one }) => ({
   board: one(boards, { fields: [boardMembers.boardId], references: [boards.id] }),
   user: one(users, { fields: [boardMembers.userId], references: [users.id] }),
+}));
+
+// ============ DOOR KNOCKING ============
+
+export const territories = pgTable("territories", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  // Store polygon coordinates as JSON array of {lat, lng} points
+  boundaries: jsonb("boundaries").notNull(), // [{lat: number, lng: number}, ...]
+  color: varchar("color").default("#3b82f6"), // Territory color for display
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const territoryAssignments = pgTable("territory_assignments", {
+  id: serial("id").primaryKey(),
+  territoryId: integer("territory_id").notNull(),
+  userId: text("user_id").notNull(),
+  assignedBy: text("assigned_by").notNull(),
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+});
+
+export const doorPins = pgTable("door_pins", {
+  id: serial("id").primaryKey(),
+  territoryId: integer("territory_id").notNull(),
+  lat: real("lat").notNull(),
+  lng: real("lng").notNull(),
+  // Customer info
+  customerName: text("customer_name"),
+  customerPhone: text("customer_phone"),
+  customerEmail: text("customer_email"),
+  address: text("address"),
+  // Status and notes
+  status: varchar("status").default("not_contacted"), // not_contacted, contacted, interested, not_interested, follow_up, sold
+  notes: text("notes"),
+  // Assignment and tracking
+  createdBy: text("created_by").notNull(),
+  assignedTo: text("assigned_to"),
+  // Appointment/reminder
+  appointmentDate: timestamp("appointment_date"),
+  appointmentNotes: text("appointment_notes"),
+  reminderDate: timestamp("reminder_date"),
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  lastContactedAt: timestamp("last_contacted_at"),
+});
+
+// Door Knocking Relations
+export const territoriesRelations = relations(territories, ({ many, one }) => ({
+  assignments: many(territoryAssignments),
+  pins: many(doorPins),
+  creator: one(users, { fields: [territories.createdBy], references: [users.id] }),
+}));
+
+export const territoryAssignmentsRelations = relations(territoryAssignments, ({ one }) => ({
+  territory: one(territories, { fields: [territoryAssignments.territoryId], references: [territories.id] }),
+  user: one(users, { fields: [territoryAssignments.userId], references: [users.id] }),
+  assigner: one(users, { fields: [territoryAssignments.assignedBy], references: [users.id] }),
+}));
+
+export const doorPinsRelations = relations(doorPins, ({ one }) => ({
+  territory: one(territories, { fields: [doorPins.territoryId], references: [territories.id] }),
+  creator: one(users, { fields: [doorPins.createdBy], references: [users.id] }),
+  assignee: one(users, { fields: [doorPins.assignedTo], references: [users.id] }),
 }));
