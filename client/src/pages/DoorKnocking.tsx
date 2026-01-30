@@ -821,6 +821,20 @@ export default function DoorKnocking() {
                   fillOpacity: selectedTerritory?.id === territory.id ? 0.3 : 0.1,
                   weight: selectedTerritory?.id === territory.id ? 3 : 1,
                 }}
+                eventHandlers={{
+                  click: (e) => {
+                    if (isNewPinMode) {
+                      // When in pin drop mode, create a pin at click location
+                      setNewPinLocation({ lat: e.latlng.lat, lng: e.latlng.lng });
+                      setSelectedTerritory(territory);
+                      setPinForm((prev) => ({ ...prev, assignedTo: user?.id || "" }));
+                      setIsPinDialogOpen(true);
+                    } else if (isDrawingTerritory) {
+                      // When drawing, add point
+                      setDrawingPoints((prev) => [...prev, { lat: e.latlng.lat, lng: e.latlng.lng }]);
+                    }
+                  },
+                }}
               >
                 <Popup>
                   <div className="font-semibold">{territory.name}</div>
