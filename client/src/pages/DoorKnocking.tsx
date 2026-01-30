@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MapContainer, TileLayer, Marker, Popup, Polygon, useMapEvents, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polygon, useMapEvents, useMap, CircleMarker } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { useAuth } from "@/hooks/use-auth";
@@ -58,32 +58,32 @@ const pinIcons: Record<string, L.Icon> = {
     iconAnchor: [16, 32],
     popupAnchor: [0, -32],
   }),
-  contacted: new L.Icon({
-    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3b82f6" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
+  maybe: new L.Icon({
+    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#eab308" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
     iconSize: [32, 32],
     iconAnchor: [16, 32],
     popupAnchor: [0, -32],
   }),
-  interested: new L.Icon({
-    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#22c55e" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
-  }),
-  not_interested: new L.Icon({
+  urgent: new L.Icon({
     iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ef4444" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
     iconSize: [32, 32],
     iconAnchor: [16, 32],
     popupAnchor: [0, -32],
   }),
-  follow_up: new L.Icon({
-    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#f59e0b" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
+  cold_lead: new L.Icon({
+    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#1e40af" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
     iconSize: [32, 32],
     iconAnchor: [16, 32],
     popupAnchor: [0, -32],
   }),
   sold: new L.Icon({
-    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#8b5cf6" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
+    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#22c55e" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32],
+  }),
+  angry: new L.Icon({
+    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#171717" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
     iconSize: [32, 32],
     iconAnchor: [16, 32],
     popupAnchor: [0, -32],
@@ -92,20 +92,20 @@ const pinIcons: Record<string, L.Icon> = {
 
 const statusLabels: Record<string, string> = {
   not_contacted: "Not Contacted",
-  contacted: "Contacted",
-  interested: "Interested",
-  not_interested: "Not Interested",
-  follow_up: "Follow Up",
+  maybe: "Maybe",
+  urgent: "Urgent / On the Fence",
+  cold_lead: "Cold Lead / Not Interested",
   sold: "Sold",
+  angry: "Angry / Do Not Contact",
 };
 
 const statusColors: Record<string, string> = {
   not_contacted: "bg-gray-500",
-  contacted: "bg-blue-500",
-  interested: "bg-green-500",
-  not_interested: "bg-red-500",
-  follow_up: "bg-amber-500",
-  sold: "bg-purple-500",
+  maybe: "bg-yellow-500",
+  urgent: "bg-red-500",
+  cold_lead: "bg-blue-800",
+  sold: "bg-green-500",
+  angry: "bg-neutral-900",
 };
 
 interface Territory {
@@ -424,10 +424,16 @@ export default function DoorKnocking() {
         setSelectedTerritory(territory);
         setPinForm((prev) => ({ ...prev, assignedTo: user?.id || "" }));
         setIsPinDialogOpen(true);
+      } else if (territories.length === 0) {
+        toast({
+          title: "No territories",
+          description: "An admin needs to draw territories first before pins can be dropped",
+          variant: "destructive",
+        });
       } else {
         toast({
-          title: "Invalid location",
-          description: "Please drop pins only within assigned territories",
+          title: "Outside territory",
+          description: "Please click inside a territory boundary to drop a pin",
           variant: "destructive",
         });
       }
@@ -526,11 +532,11 @@ export default function DoorKnocking() {
     return {
       total: pins.length,
       notContacted: pins.filter((p) => p.status === "not_contacted").length,
-      contacted: pins.filter((p) => p.status === "contacted").length,
-      interested: pins.filter((p) => p.status === "interested").length,
-      notInterested: pins.filter((p) => p.status === "not_interested").length,
-      followUp: pins.filter((p) => p.status === "follow_up").length,
+      maybe: pins.filter((p) => p.status === "maybe").length,
+      urgent: pins.filter((p) => p.status === "urgent").length,
+      coldLead: pins.filter((p) => p.status === "cold_lead").length,
       sold: pins.filter((p) => p.status === "sold").length,
+      angry: pins.filter((p) => p.status === "angry").length,
     };
   }, [pins]);
 
@@ -552,39 +558,56 @@ export default function DoorKnocking() {
             {isAdmin ? "Manage territories and track door-to-door sales" : "Your assigned territories"}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button
             variant={isNewPinMode ? "default" : "outline"}
             onClick={() => {
               setIsNewPinMode(!isNewPinMode);
               setIsDrawingTerritory(false);
+              setDrawingPoints([]);
             }}
           >
             <MapPin className="w-4 h-4 mr-2" />
             {isNewPinMode ? "Cancel Pin" : "Drop Pin"}
           </Button>
           {isAdmin && (
-            <Button
-              variant={isDrawingTerritory ? "default" : "outline"}
-              onClick={() => {
-                if (isDrawingTerritory && drawingPoints.length >= 3) {
-                  setIsTerritoryDialogOpen(true);
-                } else {
-                  setIsDrawingTerritory(!isDrawingTerritory);
-                  setIsNewPinMode(false);
+            <>
+              <Button
+                variant={isDrawingTerritory ? "default" : "outline"}
+                onClick={() => {
                   if (!isDrawingTerritory) {
+                    // Start drawing mode
+                    setIsDrawingTerritory(true);
+                    setIsNewPinMode(false);
+                    setDrawingPoints([]);
+                  } else {
+                    // Cancel drawing mode
+                    setIsDrawingTerritory(false);
                     setDrawingPoints([]);
                   }
-                }
-              }}
-            >
-              <Pencil className="w-4 h-4 mr-2" />
-              {isDrawingTerritory
-                ? drawingPoints.length >= 3
-                  ? "Save Territory"
-                  : `Drawing (${drawingPoints.length} points)`
-                : "Draw Territory"}
-            </Button>
+                }}
+              >
+                <Pencil className="w-4 h-4 mr-2" />
+                {isDrawingTerritory ? "Cancel Drawing" : "Draw Territory"}
+              </Button>
+              {isDrawingTerritory && drawingPoints.length >= 3 && (
+                <Button
+                  variant="default"
+                  onClick={() => setIsTerritoryDialogOpen(true)}
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Territory ({drawingPoints.length} points)
+                </Button>
+              )}
+              {isDrawingTerritory && drawingPoints.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={() => setDrawingPoints((prev) => prev.slice(0, -1))}
+                >
+                  Undo Point
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -592,10 +615,10 @@ export default function DoorKnocking() {
       {/* Instructions banner */}
       {(isNewPinMode || isDrawingTerritory) && (
         <div className="bg-primary/10 text-primary px-4 py-2 rounded-lg text-sm flex items-center gap-2">
-          <AlertCircle className="w-4 h-4" />
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
           {isNewPinMode
-            ? "Click on the map within a territory to drop a pin"
-            : "Click on the map to draw territory boundaries. Click 'Save Territory' when done (minimum 3 points)."}
+            ? `Click on the map within a territory to drop a pin. ${territories.length === 0 ? "(No territories exist yet - admin needs to draw one first)" : ""}`
+            : `Click anywhere on the map to add boundary points. You have ${drawingPoints.length} point${drawingPoints.length !== 1 ? "s" : ""}. Need at least 3 to save.`}
         </div>
       )}
 
@@ -614,24 +637,24 @@ export default function DoorKnocking() {
                   <span>Not Contacted: {stats.notContacted}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${statusColors.contacted}`} />
-                  <span>Contacted: {stats.contacted}</span>
+                  <div className={`w-3 h-3 rounded-full ${statusColors.maybe}`} />
+                  <span>Maybe: {stats.maybe}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${statusColors.interested}`} />
-                  <span>Interested: {stats.interested}</span>
+                  <div className={`w-3 h-3 rounded-full ${statusColors.urgent}`} />
+                  <span>Urgent: {stats.urgent}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${statusColors.not_interested}`} />
-                  <span>Not Interested: {stats.notInterested}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${statusColors.follow_up}`} />
-                  <span>Follow Up: {stats.followUp}</span>
+                  <div className={`w-3 h-3 rounded-full ${statusColors.cold_lead}`} />
+                  <span>Cold Lead: {stats.coldLead}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className={`w-3 h-3 rounded-full ${statusColors.sold}`} />
                   <span>Sold: {stats.sold}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${statusColors.angry}`} />
+                  <span>Angry: {stats.angry}</span>
                 </div>
               </div>
             </CardContent>
@@ -822,9 +845,19 @@ export default function DoorKnocking() {
             {/* Drawing points markers */}
             {isDrawingTerritory &&
               drawingPoints.map((point, index) => (
-                <Marker key={index} position={[point.lat, point.lng]}>
+                <CircleMarker
+                  key={index}
+                  center={[point.lat, point.lng]}
+                  radius={8}
+                  pathOptions={{
+                    color: "#fff",
+                    fillColor: territoryForm.color,
+                    fillOpacity: 1,
+                    weight: 2,
+                  }}
+                >
                   <Popup>Point {index + 1}</Popup>
-                </Marker>
+                </CircleMarker>
               ))}
 
             {/* Door pins */}
