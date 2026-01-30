@@ -50,44 +50,25 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png",
 });
 
-// Custom pin icons by status
-const pinIcons: Record<string, L.Icon> = {
-  not_contacted: new L.Icon({
-    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#6b7280" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
+// Pin colors by status
+const pinColors: Record<string, string> = {
+  not_contacted: "#6b7280", // gray
+  maybe: "#eab308", // yellow
+  urgent: "#ef4444", // red
+  cold_lead: "#1e40af", // dark blue
+  sold: "#22c55e", // green
+  angry: "#171717", // black
+};
+
+// Create a colored pin icon
+const createPinIcon = (color: string) => {
+  return L.divIcon({
+    className: "custom-pin-icon",
+    html: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`,
     iconSize: [32, 32],
     iconAnchor: [16, 32],
     popupAnchor: [0, -32],
-  }),
-  maybe: new L.Icon({
-    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#eab308" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
-  }),
-  urgent: new L.Icon({
-    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#ef4444" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
-  }),
-  cold_lead: new L.Icon({
-    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#1e40af" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
-  }),
-  sold: new L.Icon({
-    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#22c55e" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
-  }),
-  angry: new L.Icon({
-    iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#171717" width="32" height="32"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`),
-    iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
-  }),
+  });
 };
 
 const statusLabels: Record<string, string> = {
@@ -879,25 +860,34 @@ export default function DoorKnocking() {
               <Marker
                 key={pin.id}
                 position={[pin.lat, pin.lng]}
-                icon={pinIcons[pin.status] || pinIcons.not_contacted}
+                icon={createPinIcon(pinColors[pin.status] || pinColors.not_contacted)}
                 eventHandlers={{
-                  click: () => handlePinClick(pin),
+                  click: (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    handlePinClick(pin);
+                  },
                 }}
               >
                 <Popup>
-                  <div className="min-w-[150px]">
-                    <div className="font-semibold">{pin.customerName || "No name"}</div>
-                    <div className="text-sm text-muted-foreground">{pin.address || "No address"}</div>
-                    <div className={`text-xs mt-1 px-2 py-0.5 rounded inline-block text-white ${statusColors[pin.status]}`}>
-                      {statusLabels[pin.status]}
-                    </div>
-                    <Button
-                      size="sm"
-                      className="w-full mt-2"
-                      onClick={() => handlePinClick(pin)}
+                  <div className="min-w-[180px] p-1">
+                    <div className="font-bold text-base">{pin.customerName || "No name"}</div>
+                    <div className="text-sm text-gray-600 mt-1">{pin.address || "No address"}</div>
+                    {pin.customerPhone && <div className="text-sm text-gray-600">{pin.customerPhone}</div>}
+                    <div
+                      className="text-xs mt-2 px-2 py-1 rounded inline-block text-white"
+                      style={{ backgroundColor: pinColors[pin.status] || pinColors.not_contacted }}
                     >
-                      View Details
-                    </Button>
+                      {statusLabels[pin.status] || "Not Contacted"}
+                    </div>
+                    <button
+                      className="w-full mt-2 px-3 py-1.5 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handlePinClick(pin);
+                      }}
+                    >
+                      Edit Details
+                    </button>
                   </div>
                 </Popup>
               </Marker>
